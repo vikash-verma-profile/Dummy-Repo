@@ -129,6 +129,17 @@ jobs:
           task_name = f"{pipeline_name}_task"
 
           with conn.cursor() as cur:
+              # Show a small preview of the SELECT results in the Actions logs.
+              # Snowflake TASK execution does not return result sets, so we run the SELECT here.
+              sample_sql = f"SELECT * FROM ({transform_sql}) AS T LIMIT 10"
+              cur.execute(sample_sql)
+              rows = cur.fetchmany(10)
+              colnames = [d[0] for d in cur.description] if cur.description else []
+              print("Preview rows (up to 10):")
+              print(colnames)
+              for r in rows:
+                  print(r)
+
               cur.execute(
                   f"CREATE TABLE IF NOT EXISTS {target_table} AS "
                   f"SELECT * FROM {source_table} WHERE 1=0"
