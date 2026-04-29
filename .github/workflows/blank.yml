@@ -60,9 +60,9 @@ jobs:
           from langchain_groq import ChatGroq
 
           pipeline_name = os.environ["ETL_PIPELINE_NAME"]
-          source_table = os.environ["ETL_SOURCE_TABLE"]
-          target_table = os.environ["ETL_TARGET_TABLE"]
-          warehouse = os.environ["SNOWFLAKE_WAREHOUSE"]
+          source_table = "st_Orders"
+          target_table = "tt_orders"
+          warehouse = "compute_wh"
 
           if not source_table or not target_table:
               raise ValueError("Missing ETL_SOURCE_TABLE and/or ETL_TARGET_TABLE. Set GitHub repo variables ETL_SOURCE_TABLE and ETL_TARGET_TABLE (or use workflow_dispatch inputs).")
