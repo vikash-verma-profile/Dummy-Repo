@@ -1,6 +1,9 @@
 name: Runtime ETL Pipeline (Snowflake + Groq Agent)
 
 on:
+  push:
+    branches:
+      - "**"
   workflow_dispatch:
     inputs:
       pipeline_name:
@@ -22,12 +25,16 @@ jobs:
   run-etl:
     runs-on: ubuntu-latest
     env:
+      ETL_PIPELINE_NAME: ${{ github.event.inputs.pipeline_name || 'etl_runtime_demo' }}
+      ETL_SOURCE_TABLE: ${{ github.event.inputs.source_table || vars.ETL_SOURCE_TABLE }}
+      ETL_TARGET_TABLE: ${{ github.event.inputs.target_table || vars.ETL_TARGET_TABLE }}
+      ETL_WAREHOUSE_FALLBACK: ${{ github.event.inputs.warehouse || vars.SNOWFLAKE_WAREHOUSE || 'COMPUTE_WH' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
       SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ github.event.inputs.warehouse }}
+      SNOWFLAKE_WAREHOUSE: ${{ env.ETL_WAREHOUSE_FALLBACK }}
       SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
       SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
     steps:
@@ -52,9 +59,13 @@ jobs:
           import snowflake.connector
           from langchain_groq import ChatGroq
 
-          pipeline_name = "${{ github.event.inputs.pipeline_name }}"
-          source_table = "${{ github.event.inputs.source_table }}"
-          target_table = "${{ github.event.inputs.target_table }}"
+          pipeline_name = os.environ["ETL_PIPELINE_NAME"]
+          source_table = os.environ["ETL_SOURCE_TABLE"]
+          target_table = os.environ["ETL_TARGET_TABLE"]
+          warehouse = os.environ["SNOWFLAKE_WAREHOUSE"]
+
+          if not source_table or not target_table:
+              raise ValueError("Missing ETL_SOURCE_TABLE and/or ETL_TARGET_TABLE. Set GitHub repo variables ETL_SOURCE_TABLE and ETL_TARGET_TABLE (or use workflow_dispatch inputs).")
 
           if not re.fullmatch(r"[A-Za-z0-9_]+", pipeline_name):
               raise ValueError("pipeline_name must contain only letters, numbers, underscore")
@@ -95,7 +106,7 @@ jobs:
                   f"CREATE TABLE IF NOT EXISTS {target_table} AS "
                   f"SELECT * FROM {source_table} WHERE 1=0"
               )
-              cur.execute(f"CREATE OR REPLACE TASK {task_name} WAREHOUSE = {os.environ['SNOWFLAKE_WAREHOUSE']} AS INSERT INTO {target_table} {transform_sql}")
+              cur.execute(f"CREATE OR REPLACE TASK {task_name} WAREHOUSE = {warehouse} AS INSERT INTO {target_table} {transform_sql}")
               cur.execute(f"EXECUTE TASK {task_name}")
 
           conn.close()
