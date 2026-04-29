@@ -80,14 +80,41 @@ jobs:
           )
 
           prompt = (
-              f"Create a single Snowflake SQL SELECT statement that transforms data from "
-              f"{source_table} for loading into {target_table}. Keep it production-safe."
+              "Return ONLY a single Snowflake SELECT statement, no explanation, "
+              "no markdown, no comments. It should read from "
+              f"{source_table} and produce rows ready to insert into {target_table}."
           )
-          transform_sql = llm.invoke(prompt).content.strip()
 
-          # Minimal safety fallback in case model output is empty.
+          raw = llm.invoke(prompt).content.strip()
+          print("Raw LLM output:")
+          print(raw)
+
+          # Extract something that looks like a SELECT statement and strip noise.
+          lines = []
+          for line in raw.splitlines():
+              l = line.strip()
+              if not l:
+                  continue
+              # Skip markdown fences and obviously non‑SQL prose
+              if l.startswith("```") or l.lower().startswith("to "):
+                  continue
+              lines.append(l)
+
+          transform_sql = " ".join(lines).strip()
+
+          # Ensure we have a SELECT and no trailing semicolon
+          if transform_sql.endswith(";"):
+              transform_sql = transform_sql[:-1].strip()
+
+          if not transform_sql.lower().lstrip().startswith("select"):
+              raise ValueError(f"Model did not return a SELECT statement: {transform_sql!r}")
+
+          # Fallback if somehow empty
           if not transform_sql:
               transform_sql = f"SELECT * FROM {source_table}"
+
+          print("Final SELECT used for task:")
+          print(transform_sql)
 
           conn = snowflake.connector.connect(
               account=os.environ["SNOWFLAKE_ACCOUNT"],
